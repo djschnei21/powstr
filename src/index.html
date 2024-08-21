@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PoWstr - Nostr PoW Client</title>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="app">
+        <h1>PoWstr</h1>
+        <div id="login-section">
+            <button id="login-button">Login with Nostr</button>
+        </div>
+        <div id="post-section" style="display: none;">
+            <textarea id="note-content" placeholder="Enter your note"></textarea>
+            <input type="number" id="pow-target" placeholder="Enter PoW target">
+            <button id="post-button">Post Note</button>
+        </div>
+        <div id="hashrate-gauge">
+            <div class="gauge-label">Hash Rate</div>
+            <div class="gauge-container">
+                <div class="gauge-bar"></div>
+                <div class="gauge-value">0 H/s</div>
+            </div>
+        </div>
+        <div id="mining-status" style="display: none;">
+            <h3>Mining Status</h3>
+            <p>Best PoW: <span id="best-pow">0</span></p>
+        </div>
+        <div id="leaderboard">
+            <h2>HIGH SCORES</h2>
+            <table id="leaderboard-table">
+                <thead>
+                    <tr>
+                        <th>Rank</th>
+                        <th>Name</th>
+                        <th>PoW</th>
+                    </tr>
+                </thead>
+                <tbody id="leaderboard-list">
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <script src="https://unpkg.com/bech32@2.0.0/dist/index.js"></script>
+    <script src="index.js"></script>
+</body>
+</html>
