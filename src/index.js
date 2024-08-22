@@ -114,25 +114,33 @@ async function updateLeaderboard() {
     leaderboardList.innerHTML = '';
     const filter = { kinds: [1], limit: 100 };
     const events = await ndk.fetchEvents(filter);
-    const sortedEvents = Array.from(events).sort((a, b) => {
-        const powA = countLeadingZeroBits(a.id);
-        const powB = countLeadingZeroBits(b.id);
-        return powB - powA;
-    }).slice(0, 10);
+
+    // Create a Map to store the best PoW for each unique pubkey
+    const bestPowByPubkey = new Map();
+
+    events.forEach(event => {
+        const pow = countLeadingZeroBits(event.id);
+        const currentBest = bestPowByPubkey.get(event.pubkey) || 0;
+        if (pow > currentBest) {
+            bestPowByPubkey.set(event.pubkey, pow);
+        }
+    });
+
+    // Convert the Map to an array and sort it
+    const sortedEvents = Array.from(bestPowByPubkey.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10);
 
     for (let index = 0; index < sortedEvents.length; index++) {
-        const event = sortedEvents[index];
+        const [pubkey, pow] = sortedEvents[index];
         const tr = document.createElement('tr');
         const rankTd = document.createElement('td');
         const nameTd = document.createElement('td');
         const scoreTd = document.createElement('td');
 
         rankTd.textContent = `${index + 1}${getOrdinalSuffix(index + 1)}`;
-        
-        // Use the raw public key instead of trying to convert it
-        const pubkey = event.pubkey;
-        let displayName = pubkey.slice(0, 8); // Default to truncated pubkey
 
+        let displayName = pubkey.slice(0, 8); // Default to truncated pubkey
         try {
             const user = ndk.getUser({ pubkey: pubkey });
             await user.fetchProfile();
@@ -142,23 +150,19 @@ async function updateLeaderboard() {
             }
         } catch (error) {
             console.error(`Error fetching profile for ${pubkey}:`, error);
-            // Fallback to truncated pubkey if there's an error
         }
-        
+
         nameTd.textContent = displayName;
-        
-        const pow = countLeadingZeroBits(event.id);
         scoreTd.textContent = pow.toString().padStart(2, '0');
-        
+
         tr.appendChild(rankTd);
         tr.appendChild(nameTd);
         tr.appendChild(scoreTd);
-        
         tr.style.cursor = 'pointer';
         tr.onclick = () => {
-            window.open(`https://njump.me/${event.id}`, '_blank');
+            // You might want to adjust this to open the user's profile instead of a specific event
+            window.open(`https://njump.me/${pubkey}`, '_blank');
         };
-        
         leaderboardList.appendChild(tr);
     }
 }
