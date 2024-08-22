@@ -111,28 +111,28 @@ function updateHashRate() {
 
 async function updateLeaderboard() {
     const leaderboardList = document.getElementById('leaderboard-list');
-    leaderboardList.innerHTML = '';
+    leaderboardList.innerHTML = ''; // Clear existing entries
     const filter = { kinds: [1], limit: 100 };
     const events = await ndk.fetchEvents(filter);
 
-    // Create a Map to store the best PoW for each unique pubkey
-    const bestPowByPubkey = new Map();
-
+    // Process all events first
+    const powMap = new Map();
     events.forEach(event => {
         const pow = countLeadingZeroBits(event.id);
-        const currentBest = bestPowByPubkey.get(event.pubkey);
+        const currentBest = powMap.get(event.pubkey);
         if (!currentBest || pow > currentBest.pow) {
-            bestPowByPubkey.set(event.pubkey, { pow, event });
+            powMap.set(event.pubkey, { pow, event });
         }
     });
 
-    // Convert the Map to an array and sort it
-    const sortedEntries = Array.from(bestPowByPubkey.values())
+    // Sort and get top 10
+    const top10 = Array.from(powMap.values())
         .sort((a, b) => b.pow - a.pow)
         .slice(0, 10);
 
-    for (let index = 0; index < sortedEntries.length; index++) {
-        const { pow, event } = sortedEntries[index];
+    // Now render the top 10
+    for (let index = 0; index < top10.length; index++) {
+        const { pow, event } = top10[index];
         const tr = document.createElement('tr');
         const rankTd = document.createElement('td');
         const nameTd = document.createElement('td');
@@ -165,7 +165,6 @@ async function updateLeaderboard() {
         leaderboardList.appendChild(tr);
     }
 }
-
 function countLeadingZeroBits(hex) {
     let bits = 0;
     for (let i = 0; i < hex.length; i++) {
