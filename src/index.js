@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import ReactDOM from 'react-dom';
+import React from 'react';
+import { createRoot } from 'react-dom/client';
 import NDK from '@nostr-dev-kit/ndk';
 
 // Nostr context
@@ -114,11 +114,11 @@ const App = () => {
 };
 
 // Render the app
-ReactDOM.render(
+const root = createRoot(document.getElementById('root'));
+root.render(
   <React.StrictMode>
     <NostrProvider>
       <App />
     </NostrProvider>
-  </React.StrictMode>,
-  document.getElementById('root')
+  </React.StrictMode>
 );
