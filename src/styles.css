@@ -4,28 +4,28 @@ body {
     color: #fff;
     text-align: center;
     padding: 20px;
-}
-
-#app {
+  }
+  
+  #app {
     max-width: 800px;
     margin: 0 auto;
     border: 2px solid #00ff00;
     padding: 20px;
-}
-
-h1 {
+  }
+  
+  h1 {
     font-size: 48px;
     margin-bottom: 40px;
     color: #00ff00;
-}
-
-h2 {
+  }
+  
+  h2 {
     font-size: 36px;
     margin-bottom: 20px;
     color: #fff;
-}
-
-button {
+  }
+  
+  button {
     background-color: #000;
     color: #00ff00;
     border: 2px solid #00ff00;
@@ -33,14 +33,14 @@ button {
     margin: 10px;
     cursor: pointer;
     font-family: 'Press Start 2P', cursive;
-}
-
-button:hover {
+  }
+  
+  button:hover {
     background-color: #00ff00;
     color: #000;
-}
-
-textarea, input {
+  }
+  
+  textarea, input {
     background-color: #000;
     color: #00ff00;
     border: 2px solid #00ff00;
@@ -48,77 +48,79 @@ textarea, input {
     margin: 10px 0;
     width: calc(100% - 24px);
     font-family: 'Press Start 2P', cursive;
-}
-
-#leaderboard-table {
+  }
+  
+  #leaderboard-table {
     width: 100%;
     border-collapse: separate;
     border-spacing: 0 4px;
     margin-top: 20px;
-}
-
-#leaderboard-table th, #leaderboard-table td {
+  }
+  
+  #leaderboard-table th, #leaderboard-table td {
     padding: 10px;
     text-align: left;
-}
-
-#leaderboard-table th {
+  }
+  
+  #leaderboard-table th {
     border-bottom: 2px solid #00ff00;
-}
-
-#leaderboard-table tr:nth-child(even) {
+  }
+  
+  #leaderboard-table tr:nth-child(even) {
     background-color: #001100;
-}
-
-#leaderboard-table tr:hover {
+  }
+  
+  #leaderboard-table tr:hover {
     background-color: #002200;
-}
-
-#mining-status {
-    margin-top: 40px; /* Increase this value to move the box lower */
+  }
+  
+  #mining-status {
+    margin-top: 40px;
     padding: 10px;
     border: 2px solid #00ff00;
     background-color: #001100;
-}
-
-#mining-status h3 {
+  }
+  
+  #mining-status h3 {
     color: #00ff00;
     margin-bottom: 10px;
     margin-top: 0;
-}
-
-#mining-status p {
+  }
+  
+  #mining-status p {
     margin: 5px 0;
-}
-
-#hashrate-gauge {
+  }
+  
+  #hashrate-gauge {
     margin-top: 20px;
     text-align: left;
-}
-
-.gauge-label {
+  }
+  
+  .gauge-label {
     margin-bottom: 5px;
     color: #00ff00;
-}
-
-.gauge-container {
+  }
+  
+  .gauge-container {
     position: relative;
     height: 30px;
     background-color: #001100;
     border: 2px solid #00ff00;
-}
-
-.gauge-bar {
+    display: flex;
+  }
+  
+  .gauge-segment {
+    flex: 1;
     height: 100%;
-    width: 0;
-    background-color: #00ff00;
-    transition: width 0.5s ease-in-out;
-}
-
-.gauge-value {
+    transition: opacity 0.5s ease-in-out;
+  }
+  
+  .gauge-value {
     position: absolute;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
     color: #fff;
-}
+    z-index: 1;
+    text-shadow: 1px 1px 2px #000, -1px -1px 2px #000, 1px -1px 2px #000, -1px 1px 2px #000;
+  }
