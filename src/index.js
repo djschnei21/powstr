@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { createRoot } from 'react-dom/client';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import NDK, { NDKNip07Signer, NDKEvent, NDKFilter } from '@nostr-dev-kit/ndk';
+import { createRoot } from 'react-dom/client';
 import { Analytics } from "@vercel/analytics/react";
 import './styles.css';
 
@@ -70,9 +70,59 @@ function countLeadingZeroes(hex) {
   return count;
 }
 
+// Helper functions (make sure these are defined or imported)
+function calculateAgeDays(timestamp) {
+  const now = Math.floor(Date.now() / 1000);
+  const ageSeconds = now - timestamp;
+  return Math.floor(ageSeconds / 86400); // 86400 seconds in a day
+}
+
+function truncateText(text, maxLength, type = 'content') {
+  if (text.length <= maxLength) return text;
+  if (type === 'name') {
+    return text.substring(0, maxLength);
+  }
+  return text.substring(0, maxLength - 3) + '...';
+}
+
+function calculateTimework(workBits, timestamp) {
+  const currentTime = Math.floor(Date.now() / 1000);
+  const timeDifference = currentTime - timestamp;
+  return workBits - (timeDifference / 259200); // 259200 seconds = 3 days
+}
+
 const Leaderboard = ({ refreshTrigger }) => {
   const { ndk } = useNostr();
   const [leaderboard, setLeaderboard] = useState([]);
+  const [profilesFetched, setProfilesFetched] = useState({});
+
+  const fetchProfileName = useCallback(async (pubkey) => {
+    if (!ndk || profilesFetched[pubkey]) return;
+
+    try {
+      const filter = { kinds: [0], authors: [pubkey] };
+      const profileEvents = await ndk.fetchEvents(filter);
+      
+      if (profileEvents.size > 0) {
+        const profileEvent = Array.from(profileEvents)[0];
+        const content = JSON.parse(profileEvent.content);
+        const name = content.name || content.displayName || pubkey;
+        setLeaderboard(prevLeaderboard =>
+          prevLeaderboard.map(entry =>
+            entry.pubkey === pubkey && entry.name === truncateText(pubkey, 8, 'name')
+              ? { ...entry, name: truncateText(name, 8, 'name') }
+              : entry
+          )
+        );
+        setProfilesFetched(prev => ({ ...prev, [pubkey]: true }));
+      } else {
+        setProfilesFetched(prev => ({ ...prev, [pubkey]: true }));
+      }
+    } catch (error) {
+      console.error(`Failed to fetch profile for ${pubkey}:`, error);
+      setProfilesFetched(prev => ({ ...prev, [pubkey]: true }));
+    }
+  }, [ndk]);
 
   useEffect(() => {
     const fetchLeaderboard = async () => {
@@ -84,75 +134,89 @@ const Leaderboard = ({ refreshTrigger }) => {
         const events = await ndk.fetchEvents(filter, { relay: labourRelay });
         console.log(`Fetched ${events.size} events from labour relay`);
         
-        const scores = Array.from(events).reduce((acc, event) => {
-          const nonceTag = event.tags.find(tag => tag[0] === 'nonce');
-          if (nonceTag && nonceTag.length >= 3) {
-            const targetDifficulty = parseInt(nonceTag[2], 10);
-            const actualDifficulty = countLeadingZeroes(event.id);
-            if (!isNaN(targetDifficulty) && actualDifficulty >= targetDifficulty) {
-              if (!acc[event.pubkey] || actualDifficulty > acc[event.pubkey].score) {
-                acc[event.pubkey] = { pubkey: event.pubkey, score: actualDifficulty, eventId: event.id };
-              }
-            }
+        const scoredEvents = Array.from(events).reduce((acc, event) => {
+          const workBits = countLeadingZeroes(event.id);
+          if (workBits >= 4) {
+            const timework = calculateTimework(workBits, event.created_at);
+            acc.push({ event, timework });
           }
           return acc;
-        }, {});
-        
-        const sortedScores = Object.values(scores)
-          .sort((a, b) => b.score - a.score)
-          .slice(0, 10);
+        }, []);
 
-        // Fetch user profiles
-        const userProfiles = await Promise.all(sortedScores.map(async (score) => {
-          const filter = { kinds: [0], authors: [score.pubkey] };
-          const profileEvents = await ndk.fetchEvents(filter);
-          let name = score.pubkey.slice(0, 8);
-          if (profileEvents.size > 0) {
-            const profileEvent = Array.from(profileEvents)[0];
-            const content = JSON.parse(profileEvent.content);
-            name = content.name || content.displayName || name;
-          }
-          return { ...score, name };
+        const topEvents = scoredEvents
+          .sort((a, b) => b.timework - a.timework)
+          .slice(0, 25);
+
+        const newLeaderboard = topEvents.map(({ event, timework }) => ({
+          pubkey: event.pubkey,
+          name: truncateText(event.pubkey, 8, 'name'),
+          content: truncateText(event.content, 30),
+          score: Math.floor(timework),
+          eventId: event.id,
+          age: calculateAgeDays(event.created_at)
         }));
 
-        console.log("Sorted leaderboard:", userProfiles);
-        setLeaderboard(userProfiles);
+        setLeaderboard(newLeaderboard);
+        setProfilesFetched({});
+
+        // Start fetching profile names
+        newLeaderboard.forEach(entry => fetchProfileName(entry.pubkey));
+
       } catch (error) {
         console.error("Failed to fetch leaderboard:", error);
       }
     };
+
     fetchLeaderboard();
-  }, [ndk, refreshTrigger]);
+  }, [ndk, refreshTrigger, fetchProfileName]);
+
+  useEffect(() => {
+    // Periodically check for unfetched profiles
+    const intervalId = setInterval(() => {
+      leaderboard.forEach(entry => {
+        if (entry.name === truncateText(entry.pubkey, 8, 'name') && !profilesFetched[entry.pubkey]) {
+          fetchProfileName(entry.pubkey);
+        }
+      });
+    }, 5000); // Check every 5 seconds
+
+    return () => clearInterval(intervalId);
+  }, [leaderboard, profilesFetched, fetchProfileName]);
 
   const handleRowClick = (eventId) => {
     window.open(`https://njump.me/${eventId}`, '_blank');
   };
 
   return (
-    <div>
+    <div className="leaderboard-container">
       <h2>HIGH SCORES</h2>
-      <table id="leaderboard-table">
-        <thead>
-          <tr>
-            <th>Rank</th>
-            <th>Name</th>
-            <th>PoW</th>
-          </tr>
-        </thead>
-        <tbody>
-          {leaderboard.map((entry, index) => (
-            <tr 
-              key={entry.pubkey} 
-              onClick={() => handleRowClick(entry.eventId)}
-              style={{ cursor: 'pointer' }}
-            >
-              <td>{`${index + 1}${getOrdinal(index + 1)}`}</td>
-              <td>{entry.name}</td>
-              <td>{entry.score}</td>
+      <div className="leaderboard-table-container">
+        <table id="leaderboard-table">
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Name</th>
+              <th>Content</th>
+              <th>Score</th>
+              <th>Age (days)</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {leaderboard.map((entry, index) => (
+              <tr 
+                key={`${entry.eventId}-${index}`}
+                onClick={() => handleRowClick(entry.eventId)}
+              >
+                <td>{`${index + 1}${getOrdinal(index + 1)}`}</td>
+                <td>{entry.name}</td>
+                <td className="content-column">{entry.content}</td>
+                <td>{entry.score}</td>
+                <td>{entry.age}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 };
@@ -173,6 +237,9 @@ const App = () => {
   const [bestPoW, setBestPoW] = useState(0);
   const [hashrate, setHashrate] = useState(0);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  // Define a maximum expected hash rate (adjust this value based on your observations)
+  const maxExpectedHashRate = 200000; // 200,000 H/s
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -233,6 +300,23 @@ const App = () => {
       <div id="app">
         <h1>PoWstr</h1>
         <button onClick={login}>Login with Nostr</button>
+        <div className="explanation-box">
+          <h3>How It Works</h3>
+          <ul>
+            <li>
+              Each post gets points based on its PoW.
+            </li>
+            <li>
+              Posts lose 1 point every 3 days since they were created.
+            </li>
+            <li>
+              Newer posts can overtake older ones as time passes.
+            </li>
+            <li>
+              The leaderboard shows the top 25 posts based on this scoring system.
+            </li>
+          </ul>
+        </div>
         <Analytics />
       </div>
     );
@@ -271,7 +355,7 @@ const App = () => {
               className="gauge-segment"
               style={{
                 backgroundColor: `rgb(${Math.min(255, i * 2.55)}, ${Math.max(0, 255 - i * 2.55)}, 0)`,
-                opacity: i < Math.min(hashrate / 100, 100) ? 1 : 0.2
+                opacity: i < Math.min(hashrate / maxExpectedHashRate * 100, 100) ? 1 : 0.2
               }}
             />
           ))}
@@ -279,6 +363,23 @@ const App = () => {
         </div>
       </div>
       <Leaderboard refreshTrigger={refreshTrigger} />
+      <div className="explanation-box">
+          <h3>How It Works</h3>
+          <ul>
+            <li>
+              Each post gets points based on its PoW.
+            </li>
+            <li>
+              Posts lose 1 point every 3 days since they were created.
+            </li>
+            <li>
+              Newer posts can overtake older ones as time passes.
+            </li>
+            <li>
+              The leaderboard shows the top 25 posts based on this scoring system.
+            </li>
+          </ul>
+        </div>
       <Analytics />
     </div>
   );
