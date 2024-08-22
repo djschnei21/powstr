@@ -1,4 +1,5 @@
 import NDK, { NDKEvent, NDKNip07Signer } from "@nostr-dev-kit/ndk";
+import { Analytics } from "@vercel/analytics/react";
 import './styles.css';
 
 const RELAY_URL = 'wss://labour.fiatjaf.com/';
