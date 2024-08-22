@@ -117,41 +117,37 @@ async function login() {
 }
 
 async function connectToUserRelays() {
-  try {
-    const relayList = await ndk.fetchRelayList(user);
-    if (relayList) {
-      const writeRelays = relayList.filter(relay => relay.write);
-      for (const relay of writeRelays) {
-        await connectToRelay(relay.url);
+    try {
+      const relayList = await ndk.fetchRelayList(user);
+      if (relayList) {
+        const writeRelays = relayList.filter(relay => relay.write);
+        for (const relay of writeRelays) {
+          await connectToRelay(relay.url);
+        }
       }
+      // Always ensure we're connected to the labour relay
+      await connectToRelay(LABOUR_RELAY_URL);
+    } catch (error) {
+      console.error('Error connecting to user relays:', error);
     }
-    // Always connect to the labour relay
-    await connectToRelay(LABOUR_RELAY_URL);
-  } catch (error) {
-    console.error('Error connecting to user relays:', error);
   }
-}
-
+  
 async function connectToRelay(url) {
-  try {
-    const relay = ndk.pool.getRelay(url);
-    if (relay) {
-      await relay.connect();
-      if (relay.url === LABOUR_RELAY_URL) {
-        isConnected = true;
-        updateConnectionStatus('Connected to Labour Relay');
-      }
-    } else {
-      const newRelay = await ndk.addRelay(url);
-      await newRelay.connect();
-      if (newRelay.url === LABOUR_RELAY_URL) {
-        isConnected = true;
-        updateConnectionStatus('Connected to Labour Relay');
-      }
+    try {
+        const relay = ndk.pool.getRelay(url);
+        if (relay) {
+            await relay.connect();
+        } else {
+            const newRelay = await ndk.addRelay(url);
+            await newRelay.connect();
+        }
+        if (url === LABOUR_RELAY_URL) {
+            isConnected = true;
+            updateConnectionStatus('Connected to Labour Relay');
+        }
+    } catch (error) {
+        console.error(`Error connecting to relay ${url}:`, error);
     }
-  } catch (error) {
-    console.error(`Error connecting to relay ${url}:`, error);
-  }
 }
 
 async function postNote() {
