@@ -120,19 +120,19 @@ async function updateLeaderboard() {
 
     events.forEach(event => {
         const pow = countLeadingZeroBits(event.id);
-        const currentBest = bestPowByPubkey.get(event.pubkey) || 0;
-        if (pow > currentBest) {
-            bestPowByPubkey.set(event.pubkey, pow);
+        const currentBest = bestPowByPubkey.get(event.pubkey);
+        if (!currentBest || pow > currentBest.pow) {
+            bestPowByPubkey.set(event.pubkey, { pow, event });
         }
     });
 
     // Convert the Map to an array and sort it
-    const sortedEvents = Array.from(bestPowByPubkey.entries())
-        .sort((a, b) => b[1] - a[1])
+    const sortedEntries = Array.from(bestPowByPubkey.values())
+        .sort((a, b) => b.pow - a.pow)
         .slice(0, 10);
 
-    for (let index = 0; index < sortedEvents.length; index++) {
-        const [pubkey, pow] = sortedEvents[index];
+    for (let index = 0; index < sortedEntries.length; index++) {
+        const { pow, event } = sortedEntries[index];
         const tr = document.createElement('tr');
         const rankTd = document.createElement('td');
         const nameTd = document.createElement('td');
@@ -140,16 +140,16 @@ async function updateLeaderboard() {
 
         rankTd.textContent = `${index + 1}${getOrdinalSuffix(index + 1)}`;
 
-        let displayName = pubkey.slice(0, 8); // Default to truncated pubkey
+        let displayName = event.pubkey.slice(0, 8); // Default to truncated pubkey
         try {
-            const user = ndk.getUser({ pubkey: pubkey });
+            const user = ndk.getUser({ pubkey: event.pubkey });
             await user.fetchProfile();
             const userProfile = user.profile;
             if (userProfile) {
                 displayName = userProfile.displayName || userProfile.name || displayName;
             }
         } catch (error) {
-            console.error(`Error fetching profile for ${pubkey}:`, error);
+            console.error(`Error fetching profile for ${event.pubkey}:`, error);
         }
 
         nameTd.textContent = displayName;
@@ -160,8 +160,7 @@ async function updateLeaderboard() {
         tr.appendChild(scoreTd);
         tr.style.cursor = 'pointer';
         tr.onclick = () => {
-            // You might want to adjust this to open the user's profile instead of a specific event
-            window.open(`https://njump.me/${pubkey}`, '_blank');
+            window.open(`https://njump.me/${event.id}`, '_blank');
         };
         leaderboardList.appendChild(tr);
     }
