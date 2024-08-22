@@ -45,7 +45,7 @@ async function initNDK() {
         signer: nip07signer
     });
 
-    ndk.pool.on('relay:connect', (relay) => {
+    ndk.on('ndkRelay:connect', (relay) => {
         console.log(`Connected to relay: ${relay.url}`);
         if (relay.url === LABOUR_RELAY_URL) {
             isConnected = true;
@@ -54,7 +54,7 @@ async function initNDK() {
         }
     });
 
-    ndk.pool.on('relay:disconnect', (relay) => {
+    ndk.on('ndkRelay:disconnect', (relay) => {
         console.log(`Disconnected from relay: ${relay.url}`);
         if (relay.url === LABOUR_RELAY_URL) {
             isConnected = false;
@@ -160,7 +160,7 @@ async function publishWithRetry(event, retries = 0) {
         }
         
         // Publish to labour relay
-        const labourRelay = ndk.pool.relays.find(relay => relay.url === LABOUR_RELAY_URL);
+        const labourRelay = ndk.getRelayList().find(relay => relay.url === LABOUR_RELAY_URL);
         if (labourRelay) {
             await event.publish(labourRelay);
         } else {
@@ -168,7 +168,7 @@ async function publishWithRetry(event, retries = 0) {
         }
 
         // Publish to public relays
-        const publicRelays = ndk.pool.relays.filter(relay => PUBLIC_RELAY_URLS.includes(relay.url));
+        const publicRelays = ndk.getRelayList().filter(relay => PUBLIC_RELAY_URLS.includes(relay.url));
         await event.publish(publicRelays);
 
         alert('Note posted successfully to labour and public relays!');
@@ -205,8 +205,8 @@ async function updateLeaderboard() {
             await connectWithRetry();
         }
         // Fetch events only from the labour relay
-        const labourRelay = ndk.pool.relays.find(relay => relay.url === LABOUR_RELAY_URL);
-        events = await ndk.fetchEvents(filter, { relay: labourRelay });
+        const labourRelay = ndk.getRelayList().find(relay => relay.url === LABOUR_RELAY_URL);
+        events = await ndk.fetchEvents(filter, { relays: [labourRelay] });
     } catch (error) {
         console.error('Error fetching events:', error);
         return;
@@ -241,7 +241,7 @@ async function updateLeaderboard() {
         try {
             const user = ndk.getUser({ pubkey: event.pubkey });
             // Fetch profile from all relays
-            await user.fetchProfile({ relays: ndk.pool.relays });
+            await user.fetchProfile();
             const userProfile = user.profile;
             if (userProfile) {
                 displayName = userProfile.displayName || userProfile.name || displayName;
