@@ -18,14 +18,11 @@ const NostrProvider = ({ children }) => {
       const newNdk = new NDK();
       await newNdk.connect();
       setNdk(newNdk);
-
       const key = await newNdk.signer.user.getPublicKey();
       setPublicKey(key);
-
       const userRelays = await newNdk.pool.getRelays();
       setRelays(Array.from(userRelays.keys()));
     };
-
     initNDK();
   }, []);
 
@@ -44,13 +41,11 @@ const Leaderboard = () => {
   useEffect(() => {
     const fetchLeaderboard = async () => {
       if (!ndk) return;
-
       const events = await ndk.fetchEvents({
         kinds: [1],
         '#t': ['powstr'],
         limit: 100,
       });
-
       const scores = Array.from(events).reduce((acc, event) => {
         const pow = event.tags.find(tag => tag[0] === 'pow')?.[1];
         if (pow) {
@@ -61,21 +56,18 @@ const Leaderboard = () => {
         }
         return acc;
       }, {});
-
       const sortedLeaderboard = Object.values(scores)
         .sort((a, b) => b.score - a.score)
         .slice(0, 10);
-
       setLeaderboard(sortedLeaderboard);
     };
-
     fetchLeaderboard();
   }, [ndk]);
 
   return (
     <div>
       <h2>HIGH SCORES</h2>
-      <table>
+      <table id="leaderboard-table">
         <thead>
           <tr>
             <th>Rank</th>
@@ -97,6 +89,7 @@ const Leaderboard = () => {
   );
 };
 
+// Helper function for ordinal suffixes
 function getOrdinal(n) {
   const s = ["TH", "ST", "ND", "RD"];
   const v = n % 100;
@@ -105,20 +98,105 @@ function getOrdinal(n) {
 
 // Main App component
 const App = () => {
+  const { ndk, publicKey } = useNostr();
+  const [content, setContent] = useState('');
+  const [difficulty, setDifficulty] = useState(0);
+  const [isMining, setIsMining] = useState(false);
+  const [hashrate, setHashrate] = useState(0);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!ndk || !publicKey) return;
+    
+    setIsMining(true);
+    const startTime = Date.now();
+    let hashes = 0;
+
+    const worker = new Worker('pow-worker.js');
+    worker.postMessage({ content, difficulty });
+
+    worker.onmessage = async (event) => {
+      if (event.data.type === 'result') {
+        const { nonce, hash } = event.data;
+        worker.terminate();
+        setIsMining(false);
+
+        const endTime = Date.now();
+        const duration = (endTime - startTime) / 1000; // in seconds
+        const finalHashrate = Math.round(hashes / duration);
+        setHashrate(finalHashrate);
+
+        const tags = [
+          ['t', 'powstr'],
+          ['pow', difficulty.toString()],
+          ['nonce', nonce.toString()],
+        ];
+
+        const event = {
+          kind: 1,
+          created_at: Math.floor(Date.now() / 1000),
+          tags: tags,
+          content: content,
+          pubkey: publicKey,
+        };
+
+        await ndk.publish(event);
+        setContent('');
+        setDifficulty(0);
+      } else if (event.data.type === 'hashrate') {
+        hashes = event.data.hashes;
+        setHashrate(Math.round(hashes / ((Date.now() - startTime) / 1000)));
+      }
+    };
+  };
+
   return (
-    <div>
+    <div id="app">
       <h1>PoWstr</h1>
-      {/* Add other components and UI elements here */}
+      <form onSubmit={handleSubmit}>
+        <textarea
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
+          placeholder="Enter your message"
+        />
+        <input
+          type="number"
+          value={difficulty}
+          onChange={(e) => setDifficulty(parseInt(e.target.value))}
+          placeholder="Difficulty"
+        />
+        <button type="submit" disabled={isMining}>
+          {isMining ? 'Mining...' : 'Mine and Post'}
+        </button>
+      </form>
+      <div id="mining-status">
+        <h3>Mining Status</h3>
+        <p>Status: {isMining ? 'Mining' : 'Idle'}</p>
+        <p>Hashrate: {hashrate} H/s</p>
+      </div>
+      <div id="hashrate-gauge">
+        <div className="gauge-label">Hashrate</div>
+        <div className="gauge-container">
+          <div className="gauge-bar" style={{ width: `${Math.min(hashrate / 100, 100)}%` }}></div>
+          <div className="gauge-value">{hashrate} H/s</div>
+        </div>
+      </div>
       <Leaderboard />
     </div>
   );
 };
 
-const root = createRoot(document.getElementById('root'));
-root.render(
-  <React.StrictMode>
-    <NostrProvider>
-      <App />
-    </NostrProvider>
-  </React.StrictMode>
-);
+// Render the app
+const rootElement = document.getElementById('root');
+if (rootElement) {
+  const root = createRoot(rootElement);
+  root.render(
+    <React.StrictMode>
+      <NostrProvider>
+        <App />
+      </NostrProvider>
+    </React.StrictMode>
+  );
+} else {
+  console.error('Failed to find the root element');
+}
