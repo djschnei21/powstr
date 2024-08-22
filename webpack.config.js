@@ -1,6 +1,7 @@
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const MiniCssExtractPlugin = require('mini-css-extract-plugin');
+const CopyWebpackPlugin = require('copy-webpack-plugin');
 
 module.exports = {
   entry: './src/index.js',
@@ -22,8 +23,8 @@ module.exports = {
           options: {
             presets: ['@babel/preset-env']
           }
-        }
-      }
+        },
+      },
     ],
   },
   plugins: [
@@ -32,6 +33,11 @@ module.exports = {
     }),
     new MiniCssExtractPlugin({
       filename: 'styles.css',
+    }),
+    new CopyWebpackPlugin({
+      patterns: [
+        { from: 'src/pow-worker.js', to: 'pow-worker.js' }
+      ],
     }),
   ],
   devServer: {

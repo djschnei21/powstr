@@ -72,7 +72,7 @@ async function postNote() {
     updateHashRate(); // Initial update
 
     if (window.Worker) {
-        miningWorker = new Worker('pow-worker.js');
+        miningWorker = new Worker(new URL('./pow-worker.js', import.meta.url));
         miningWorker.postMessage({ event: ndkEvent.rawEvent(), difficulty });
 
         miningWorker.onmessage = async function(e) {
