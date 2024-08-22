@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import NDK from '@nostr-dev-kit/ndk';
+import './styles.css';
 
 // Nostr context
 const NostrContext = createContext();
