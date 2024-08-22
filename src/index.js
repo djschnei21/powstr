@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import NDK, { NDKNip07Signer, NDKEvent, NDKFilter } from '@nostr-dev-kit/ndk';
+import { Analytics } from "@vercel/analytics/react";
 import './styles.css';
 
 // Nostr context
@@ -225,6 +226,7 @@ const App = () => {
       <div id="app">
         <h1>PoWstr</h1>
         <button onClick={login}>Login with Nostr</button>
+        <Analytics />
       </div>
     );
   }
@@ -270,6 +272,7 @@ const App = () => {
         </div>
       </div>
       <Leaderboard refreshTrigger={refreshTrigger} />
+      <Analytics />
     </div>
   );
 };
