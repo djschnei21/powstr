@@ -113,70 +113,81 @@ function updateHashRate() {
 async function updateLeaderboard() {
     const leaderboardList = document.getElementById('leaderboard-list');
     leaderboardList.innerHTML = ''; // Clear existing entries
-
+  
+    // Create a separate NDK instance for public relays
+    const publicNdk = new NDK({
+      explicitRelayUrls: [
+        'wss://relay.damus.io',
+        'wss://relay.nostr.band',
+        'wss://nos.lol',
+        'wss://relay.nostr.bg'
+      ]
+    });
+    await publicNdk.connect();
+  
     const filter = { kinds: [1], limit: 100 };
-    const events = await ndk.fetchEvents(filter);
-
+    const events = await ndk.fetchEvents(filter); // This still uses the labour relay
+  
     // Process all events first
     const powMap = new Map();
     events.forEach(event => {
-        const pow = countLeadingZeroBits(event.id);
-        const currentBest = powMap.get(event.pubkey);
-        if (!currentBest || pow > currentBest.pow) {
+      const pow = countLeadingZeroBits(event.id);
+      const currentBest = powMap.get(event.pubkey);
+      if (!currentBest || pow > currentBest.pow) {
         powMap.set(event.pubkey, { pow, event });
-        }
+      }
     });
-
+  
     // Sort and get top 10
     const top10 = Array.from(powMap.values())
-        .sort((a, b) => b.pow - a.pow)
-        .slice(0, 10);
-
-    // Fetch user profiles for top 10
+      .sort((a, b) => b.pow - a.pow)
+      .slice(0, 10);
+  
+    // Fetch user profiles for top 10 using public relays
     const userProfiles = await Promise.all(top10.map(async ({ event }) => {
-        try {
-        const user = ndk.getUser({ pubkey: event.pubkey });
+      try {
+        const user = publicNdk.getUser({ pubkey: event.pubkey });
         await user.fetchProfile();
         return { pubkey: event.pubkey, profile: user.profile };
-        } catch (error) {
+      } catch (error) {
         console.error(`Error fetching profile for ${event.pubkey}:`, error);
         return { pubkey: event.pubkey, profile: null };
-        }
+      }
     }));
-
+  
     // Create a map for quick profile lookup
     const profileMap = new Map(userProfiles.map(u => [u.pubkey, u.profile]));
-
+  
     // Now render the top 10
     for (let index = 0; index < top10.length; index++) {
-        const { pow, event } = top10[index];
-        const tr = document.createElement('tr');
-        const rankTd = document.createElement('td');
-        const nameTd = document.createElement('td');
-        const scoreTd = document.createElement('td');
-        
-        rankTd.textContent = `${index + 1}${getOrdinalSuffix(index + 1)}`;
-        
-        const profile = profileMap.get(event.pubkey);
-        let displayName = event.pubkey.slice(0, 8); // Default to truncated pubkey
-        if (profile) {
+      const { pow, event } = top10[index];
+      const tr = document.createElement('tr');
+      const rankTd = document.createElement('td');
+      const nameTd = document.createElement('td');
+      const scoreTd = document.createElement('td');
+  
+      rankTd.textContent = `${index + 1}${getOrdinalSuffix(index + 1)}`;
+  
+      const profile = profileMap.get(event.pubkey);
+      let displayName = event.pubkey.slice(0, 8); // Default to truncated pubkey
+      if (profile) {
         displayName = profile.displayName || profile.name || displayName;
-        }
-        
-        nameTd.textContent = displayName;
-        scoreTd.textContent = pow.toString().padStart(2, '0');
-        
-        tr.appendChild(rankTd);
-        tr.appendChild(nameTd);
-        tr.appendChild(scoreTd);
-        tr.style.cursor = 'pointer';
-        tr.onclick = () => {
+      }
+  
+      nameTd.textContent = displayName;
+      scoreTd.textContent = pow.toString().padStart(2, '0');
+  
+      tr.appendChild(rankTd);
+      tr.appendChild(nameTd);
+      tr.appendChild(scoreTd);
+      tr.style.cursor = 'pointer';
+      tr.onclick = () => {
         window.open(`https://njump.me/${event.id}`, '_blank');
-        };
-        
-        leaderboardList.appendChild(tr);
+      };
+  
+      leaderboardList.appendChild(tr);
     }
-}
+  }
 
 function countLeadingZeroBits(hex) {
     let bits = 0;
