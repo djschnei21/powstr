@@ -1,10 +1,15 @@
-import NDK, { NDKEvent, NDKNip07Signer, NDKRelay } from "@nostr-dev-kit/ndk";
+import NDK, { NDKEvent, NDKNip07Signer } from "@nostr-dev-kit/ndk";
 import { Analytics } from "@vercel/analytics/react";
 import './styles.css';
 
 const LABOUR_RELAY_URL = 'wss://labour.fiatjaf.com/';
-const MAX_RETRIES = 5;
-const RETRY_DELAY = 5000; // 5 seconds
+const PUBLIC_RELAY_URLS = [
+  'wss://relay.damus.io',
+  'wss://nos.lol',
+  'wss://relay.nostr.band',
+  'wss://relay.snort.social',
+  'wss://eden.nostr.land'
+];
 
 let ndk;
 let user;
@@ -13,19 +18,12 @@ let startTime;
 let hashCount = 0;
 let bestPoW = 0;
 let maxHashRate = 400000; // Initial value, will be updated dynamically
-let isConnected = false;
-let reconnectAttempts = 0;
 
-document.addEventListener('DOMContentLoaded', () => {
-  initializeApp();
-});
+document.addEventListener('DOMContentLoaded', initializeApp);
 
 function initializeApp() {
   document.getElementById('login-button').addEventListener('click', login);
   document.getElementById('post-button').addEventListener('click', postNote);
-  
-  // Initialize the gauge
-  const gaugeContainer = document.querySelector('.gauge-container');
   
   // Show mining status div on page load
   document.getElementById('mining-status').style.display = 'block';
@@ -36,21 +34,13 @@ function initializeApp() {
 async function initNDK() {
   const nip07signer = new NDKNip07Signer();
   ndk = new NDK({
-    explicitRelayUrls: [
-      'wss://relay.damus.io',
-      'wss://nos.lol',
-      'wss://relay.nostr.band',
-      'wss://relay.snort.social',
-      LABOUR_RELAY_URL
-    ],
+    explicitRelayUrls: [LABOUR_RELAY_URL, ...PUBLIC_RELAY_URLS],
     signer: nip07signer
   });
 
   ndk.on('ndkRelay:connect', (relay) => {
     console.log(`Connected to relay: ${relay.url}`);
     if (relay.url === LABOUR_RELAY_URL) {
-      isConnected = true;
-      reconnectAttempts = 0;
       updateConnectionStatus('Connected to Labour Relay');
     }
   });
@@ -58,36 +48,11 @@ async function initNDK() {
   ndk.on('ndkRelay:disconnect', (relay) => {
     console.log(`Disconnected from relay: ${relay.url}`);
     if (relay.url === LABOUR_RELAY_URL) {
-      isConnected = false;
       updateConnectionStatus('Disconnected from Labour Relay');
-      attemptReconnect();
     }
   });
 
-  await connectWithRetry();
-}
-
-async function connectWithRetry() {
-  while (reconnectAttempts < MAX_RETRIES) {
-    try {
-      await ndk.connect();
-      return;
-    } catch (error) {
-      console.error('Connection failed:', error);
-      reconnectAttempts++;
-      updateConnectionStatus(`Reconnecting (Attempt ${reconnectAttempts}/${MAX_RETRIES})`);
-      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
-    }
-  }
-  updateConnectionStatus('Connection failed. Please try again later.');
-}
-
-function attemptReconnect() {
-  if (!isConnected && reconnectAttempts < MAX_RETRIES) {
-    reconnectAttempts++;
-    updateConnectionStatus(`Reconnecting (Attempt ${reconnectAttempts}/${MAX_RETRIES})`);
-    setTimeout(() => connectWithRetry(), RETRY_DELAY);
-  }
+  await ndk.connect();
 }
 
 function updateConnectionStatus(status) {
@@ -105,7 +70,6 @@ async function login() {
       document.getElementById('login-section').style.display = 'none';
       document.getElementById('post-section').style.display = 'block';
       document.getElementById('mining-status').style.display = 'block';
-      await connectToUserRelays();
       updateLeaderboard();
     } else {
       throw new Error('Failed to get user public key');
@@ -114,40 +78,6 @@ async function login() {
     console.error('Login error:', error);
     alert('Login failed. Please make sure you have a Nostr extension installed and try again.');
   }
-}
-
-async function connectToUserRelays() {
-    try {
-      const relayList = await ndk.fetchRelayList(user);
-      if (relayList) {
-        const writeRelays = relayList.filter(relay => relay.write);
-        for (const relay of writeRelays) {
-          await connectToRelay(relay.url);
-        }
-      }
-      // Always ensure we're connected to the labour relay
-      await connectToRelay(LABOUR_RELAY_URL);
-    } catch (error) {
-      console.error('Error connecting to user relays:', error);
-    }
-  }
-  
-async function connectToRelay(url) {
-    try {
-        const relay = ndk.pool.getRelay(url);
-        if (relay) {
-            await relay.connect();
-        } else {
-            const newRelay = await ndk.addRelay(url);
-            await newRelay.connect();
-        }
-        if (url === LABOUR_RELAY_URL) {
-            isConnected = true;
-            updateConnectionStatus('Connected to Labour Relay');
-        }
-    } catch (error) {
-        console.error(`Error connecting to relay ${url}:`, error);
-    }
 }
 
 async function postNote() {
@@ -175,7 +105,7 @@ async function postNote() {
     miningWorker.onmessage = async function(e) {
       if (e.data.type === 'result') {
         const minedEvent = new NDKEvent(ndk, e.data.event);
-        await publishWithRetry(minedEvent);
+        await publishEvent(minedEvent);
       } else if (e.data.type === 'progress') {
         hashCount = e.data.hashRate * ((Date.now() - startTime) / 1000);
         bestPoW = e.data.bestLeadingZeroes;
@@ -189,35 +119,15 @@ async function postNote() {
   }
 }
 
-async function publishWithRetry(event, retries = 0) {
+async function publishEvent(event) {
   try {
-    // Ensure we're connected before attempting to publish
-    if (!isConnected) {
-      await connectWithRetry();
-    }
-
-    // Publish to labour relay
-    const labourRelay = ndk.getRelayList().find(relay => relay.url === LABOUR_RELAY_URL);
-    if (labourRelay) {
-      await event.publish(labourRelay);
-    } else {
-      throw new Error('Labour relay not found in the pool');
-    }
-
-    // Publish to user's write relays
-    const userWriteRelays = ndk.getRelayList().filter(relay => relay.url !== LABOUR_RELAY_URL);
-    await event.publish(userWriteRelays);
-
-    alert('Note posted successfully to labour and user write relays!');
+    // Publish to labour relay and public relays
+    await event.publish();
+    alert('Note posted successfully!');
     updateLeaderboard();
   } catch (error) {
     console.error('Error posting note:', error);
-    if (retries < MAX_RETRIES) {
-      console.log(`Retrying post... (Attempt ${retries + 1}/${MAX_RETRIES})`);
-      setTimeout(() => publishWithRetry(event, retries + 1), RETRY_DELAY);
-    } else {
-      alert('Failed to post note after multiple attempts. Please try again later.');
-    }
+    alert('Failed to post note. Please try again later.');
   } finally {
     document.getElementById('post-button').disabled = false;
   }
@@ -235,76 +145,58 @@ async function updateLeaderboard() {
   const leaderboardList = document.getElementById('leaderboard-list');
   leaderboardList.innerHTML = ''; // Clear existing entries
   const filter = { kinds: [1], limit: 500 }; // Fetch up to 500 events
-  let events;
 
   try {
-    // Ensure we're connected before fetching events
-    if (!isConnected) {
-      await connectWithRetry();
-    }
+    const events = await ndk.fetchEvents(filter);
+    const powMap = new Map();
+    events.forEach(event => {
+      const pow = countLeadingZeroBits(event.id);
+      const currentBest = powMap.get(event.pubkey);
+      if (!currentBest || pow > currentBest.pow) {
+        powMap.set(event.pubkey, { pow, event });
+      }
+    });
 
-    // Fetch events only from the labour relay
-    const labourRelay = ndk.pool.relays.find(relay => relay.url === LABOUR_RELAY_URL);
-    if (labourRelay) {
-      events = await ndk.fetchEvents(filter, { relays: [labourRelay] });
-    } else {
-      throw new Error('Labour relay not found in the pool');
+    const top10 = Array.from(powMap.values())
+      .sort((a, b) => b.pow - a.pow)
+      .slice(0, 10);
+
+    for (let index = 0; index < top10.length; index++) {
+      const { pow, event } = top10[index];
+      const tr = document.createElement('tr');
+      const rankTd = document.createElement('td');
+      const nameTd = document.createElement('td');
+      const scoreTd = document.createElement('td');
+
+      rankTd.textContent = `${index + 1}${getOrdinalSuffix(index + 1)}`;
+      let displayName = event.pubkey.slice(0, 8); // Default to truncated pubkey
+
+      try {
+        const user = ndk.getUser({ pubkey: event.pubkey });
+        await user.fetchProfile();
+        const userProfile = user.profile;
+        if (userProfile) {
+          displayName = userProfile.displayName || userProfile.name || displayName;
+        }
+      } catch (error) {
+        console.error(`Error fetching profile for ${event.pubkey}:`, error);
+      }
+
+      nameTd.textContent = displayName;
+      scoreTd.textContent = pow.toString().padStart(2, '0');
+
+      tr.appendChild(rankTd);
+      tr.appendChild(nameTd);
+      tr.appendChild(scoreTd);
+      tr.style.cursor = 'pointer';
+      tr.onclick = () => {
+        window.open(`https://njump.me/${event.id}`, '_blank');
+      };
+
+      leaderboardList.appendChild(tr);
     }
   } catch (error) {
     console.error('Error fetching events:', error);
-    return;
-  }
-
-  // Process all events first
-  const powMap = new Map();
-  events.forEach(event => {
-    const pow = countLeadingZeroBits(event.id);
-    const currentBest = powMap.get(event.pubkey);
-    if (!currentBest || pow > currentBest.pow) {
-      powMap.set(event.pubkey, { pow, event });
-    }
-  });
-
-  // Sort and get top 10
-  const top10 = Array.from(powMap.values())
-    .sort((a, b) => b.pow - a.pow)
-    .slice(0, 10);
-
-  // Now render the top 10
-  for (let index = 0; index < top10.length; index++) {
-    const { pow, event } = top10[index];
-    const tr = document.createElement('tr');
-    const rankTd = document.createElement('td');
-    const nameTd = document.createElement('td');
-    const scoreTd = document.createElement('td');
-
-    rankTd.textContent = `${index + 1}${getOrdinalSuffix(index + 1)}`;
-    let displayName = event.pubkey.slice(0, 8); // Default to truncated pubkey
-
-    try {
-      const user = ndk.getUser({ pubkey: event.pubkey });
-      // Fetch profile from all relays
-      await user.fetchProfile();
-      const userProfile = user.profile;
-      if (userProfile) {
-        displayName = userProfile.displayName || userProfile.name || displayName;
-      }
-    } catch (error) {
-      console.error(`Error fetching profile for ${event.pubkey}:`, error);
-    }
-
-    nameTd.textContent = displayName;
-    scoreTd.textContent = pow.toString().padStart(2, '0');
-
-    tr.appendChild(rankTd);
-    tr.appendChild(nameTd);
-    tr.appendChild(scoreTd);
-    tr.style.cursor = 'pointer';
-    tr.onclick = () => {
-      window.open(`https://njump.me/${event.id}`, '_blank');
-    };
-
-    leaderboardList.appendChild(tr);
   }
 }
 
