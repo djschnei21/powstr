@@ -70,7 +70,6 @@ function countLeadingZeroes(hex) {
   return count;
 }
 
-// Leaderboard component
 const Leaderboard = ({ refreshTrigger }) => {
   const { ndk } = useNostr();
   const [leaderboard, setLeaderboard] = useState([]);
@@ -92,7 +91,7 @@ const Leaderboard = ({ refreshTrigger }) => {
             const actualDifficulty = countLeadingZeroes(event.id);
             if (!isNaN(targetDifficulty) && actualDifficulty >= targetDifficulty) {
               if (!acc[event.pubkey] || actualDifficulty > acc[event.pubkey].score) {
-                acc[event.pubkey] = { pubkey: event.pubkey, score: actualDifficulty };
+                acc[event.pubkey] = { pubkey: event.pubkey, score: actualDifficulty, eventId: event.id };
               }
             }
           }
@@ -125,6 +124,10 @@ const Leaderboard = ({ refreshTrigger }) => {
     fetchLeaderboard();
   }, [ndk, refreshTrigger]);
 
+  const handleRowClick = (eventId) => {
+    window.open(`https://njump.me/${eventId}`, '_blank');
+  };
+
   return (
     <div>
       <h2>HIGH SCORES</h2>
@@ -138,7 +141,11 @@ const Leaderboard = ({ refreshTrigger }) => {
         </thead>
         <tbody>
           {leaderboard.map((entry, index) => (
-            <tr key={entry.pubkey}>
+            <tr 
+              key={entry.pubkey} 
+              onClick={() => handleRowClick(entry.eventId)}
+              style={{ cursor: 'pointer' }}
+            >
               <td>{`${index + 1}${getOrdinal(index + 1)}`}</td>
               <td>{entry.name}</td>
               <td>{entry.score}</td>
