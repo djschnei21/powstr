@@ -36,6 +36,13 @@ function initializeApp() {
 async function initNDK() {
   const nip07signer = new NDKNip07Signer();
   ndk = new NDK({
+    explicitRelayUrls: [
+      'wss://relay.damus.io',
+      'wss://nos.lol',
+      'wss://relay.nostr.band',
+      'wss://relay.snort.social',
+      LABOUR_RELAY_URL
+    ],
     signer: nip07signer
   });
 
