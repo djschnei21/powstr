@@ -200,16 +200,21 @@ async function updateLeaderboard() {
     const filter = { kinds: [1], limit: 100 };
     let events;
     try {
-        // Ensure we're connected before fetching events
-        if (!isConnected) {
-            await connectWithRetry();
-        }
-        // Fetch events only from the labour relay
-        const labourRelay = ndk.getRelayList().find(relay => relay.url === LABOUR_RELAY_URL);
+      // Ensure we're connected before fetching events
+      if (!isConnected) {
+        await connectWithRetry();
+      }
+  
+      // Fetch events only from the labour relay
+      const labourRelay = ndk.pool.relays.find(relay => relay.url === LABOUR_RELAY_URL);
+      if (labourRelay) {
         events = await ndk.fetchEvents(filter, { relays: [labourRelay] });
+      } else {
+        throw new Error('Labour relay not found in the pool');
+      }
     } catch (error) {
-        console.error('Error fetching events:', error);
-        return;
+      console.error('Error fetching events:', error);
+      return;
     }
 
     // Process all events first
